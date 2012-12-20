@@ -1,4 +1,4 @@
-redis-rust
+rust-redis
 ==========
 
 Redis client for Rust
