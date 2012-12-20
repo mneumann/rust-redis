@@ -29,53 +29,42 @@ priv fn parse_data(len: uint, sb: net::tcp::TcpSocketBuf) -> Result {
 fn parse_list(len: uint, sb: net::tcp::TcpSocketBuf) -> Result {
   let mut list: ~[Result] = ~[];
   for len.times {
-    let line = sb.read_line();
-    assert line.len() >= 1;
-    let c = line.char_at(0);
-    let rest = line.slice(1, line.len() - 1);
-    let v = 
-      match c {
-	'$' =>
-	  match int::from_str(rest) {
-	    None => fail,
-	    Some(-1) => Nil,
-	    Some(len) if len >= 0 => parse_data(len as uint, sb),
-	    Some(_) => fail
-	  },
-	_ => fail
-      };
-    list.push(v);
+    if sb.read_char() != '$' { fail }
+    list.push(parse_bulk(sb));
   }
   return List(list);
 }
 
-// XXX: use read_char, then read_line!
+priv fn chop(s: ~str) -> ~str {
+  s.slice(0, s.len() - 1)
+}
+  
+priv fn parse_bulk(sb: net::tcp::TcpSocketBuf) -> Result {
+  match int::from_str(chop(sb.read_line())) {
+    None => fail,
+    Some(-1) => Nil,
+    Some(len) if len >= 0 => parse_data(len as uint, sb),
+    Some(_) => fail
+  }
+}
+
+priv fn parse_multi(sb: net::tcp::TcpSocketBuf) -> Result {
+  match int::from_str(chop(sb.read_line())) {
+    None => fail,
+    Some(-1) => Nil,
+    Some(0) => List(~[]),
+    Some(len) if len >= 0 => parse_list(len as uint, sb),
+    Some(_) => fail
+  }
+}
+
 fn parse_response(sb: net::tcp::TcpSocketBuf) -> Result {
-  let line = sb.read_line();
-  assert line.len() >= 1;
-
-  let c = line.char_at(0);
-  let rest = line.slice(1, line.len() - 1);
-
-  match c {
-    '$' =>
-      match int::from_str(rest) {
-        None => fail, 
-        Some(-1) => Nil,
-        Some(len) if len >= 0 => parse_data(len as uint, sb),
-        Some(_) => fail
-      },
-    '*' =>
-      match int::from_str(rest) {
-        None => fail,
-        Some(-1) => Nil,
-        Some(0) => List(~[]), 
-        Some(len) if len >= 0 => parse_list(len as uint, sb),
-        Some(_) => fail
-      },
-    '+' => Status(rest),
-    '-' => Error(rest),
-    ':' => match int::from_str(rest) {
+  match sb.read_char() {
+    '$' => parse_bulk(sb),
+    '*' => parse_multi(sb),
+    '+' => Status(chop(sb.read_line())),
+    '-' => Error(chop(sb.read_line())),
+    ':' => match int::from_str(chop(sb.read_line())) {
              None => fail,
              Some(i) => Int(i)
            },
@@ -92,7 +81,6 @@ fn cmd_to_str(cmd: ~[~str]) -> ~str {
   }
   res
 }
-
 
 fn query(cmd: ~[~str], sb: net::tcp::TcpSocketBuf) -> Result {
   let cmd = cmd_to_str(cmd);
