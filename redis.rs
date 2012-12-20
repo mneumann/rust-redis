@@ -26,7 +26,7 @@ priv fn parse_data(len: uint, sb: net::tcp::TcpSocketBuf) -> Result {
   return res;
 }
 
-fn parse_list(len: uint, sb: net::tcp::TcpSocketBuf) -> Result {
+priv fn parse_list(len: uint, sb: net::tcp::TcpSocketBuf) -> Result {
   let mut list: ~[Result] = ~[];
   for len.times {
     let v =
@@ -70,7 +70,7 @@ priv fn parse_int(sb: net::tcp::TcpSocketBuf) -> Result {
   }
 }
 
-fn parse_response(sb: net::tcp::TcpSocketBuf) -> Result {
+priv fn parse_response(sb: net::tcp::TcpSocketBuf) -> Result {
   match sb.read_char() {
     '$' => parse_bulk(sb),
     '*' => parse_multi(sb),
@@ -81,7 +81,7 @@ fn parse_response(sb: net::tcp::TcpSocketBuf) -> Result {
   }
 }
 
-fn cmd_to_str(cmd: ~[~str]) -> ~str {
+priv fn cmd_to_str(cmd: ~[~str]) -> ~str {
   let mut res = ~"*";
   str::push_str(&mut res, cmd.len().to_str());
   str::push_str(&mut res, "\r\n"); 
