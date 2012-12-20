@@ -29,8 +29,13 @@ priv fn parse_data(len: uint, sb: net::tcp::TcpSocketBuf) -> Result {
 fn parse_list(len: uint, sb: net::tcp::TcpSocketBuf) -> Result {
   let mut list: ~[Result] = ~[];
   for len.times {
-    if sb.read_char() != '$' { fail }
-    list.push(parse_bulk(sb));
+    let v =
+      match sb.read_char() {
+        '$' => parse_bulk(sb),
+        ':' => parse_int(sb),
+         _  => fail
+      };
+    list.push(v);
   }
   return List(list);
 }
@@ -58,16 +63,20 @@ priv fn parse_multi(sb: net::tcp::TcpSocketBuf) -> Result {
   }
 }
 
+priv fn parse_int(sb: net::tcp::TcpSocketBuf) -> Result {
+  match int::from_str(chop(sb.read_line())) {
+    None => fail,
+    Some(i) => Int(i)
+  }
+}
+
 fn parse_response(sb: net::tcp::TcpSocketBuf) -> Result {
   match sb.read_char() {
     '$' => parse_bulk(sb),
     '*' => parse_multi(sb),
     '+' => Status(chop(sb.read_line())),
     '-' => Error(chop(sb.read_line())),
-    ':' => match int::from_str(chop(sb.read_line())) {
-             None => fail,
-             Some(i) => Int(i)
-           },
+    ':' => parse_int(sb),
     _   => fail
   }
 }
@@ -84,7 +93,7 @@ fn cmd_to_str(cmd: ~[~str]) -> ~str {
 
 fn query(cmd: ~[~str], sb: net::tcp::TcpSocketBuf) -> Result {
   let cmd = cmd_to_str(cmd);
-  io::println(cmd);
+  //io::println(cmd);
   sb.write_str(cmd);
   let res = parse_response(sb);
   io::println(fmt!("%?", res));
@@ -98,6 +107,18 @@ fn main() {
   let connect_result = net::tcp::connect(server_ip_addr, server_port, iotask); 
   let sock = result::unwrap(connect_result);
   let sb = net::tcp::socket_buf(sock);
+
+/*  for 10_000.times {
+    query(~[~"GET", ~"abc"], sb);
+  }
+*/
+
+  query(~[~"MULTI"], sb);
+  query(~[~"GET", ~"def"], sb);
+  query(~[~"INCR", ~"def"], sb);
+  query(~[~"INCR", ~"def"], sb);
+  query(~[~"GET", ~"def"], sb);
+  query(~[~"EXEC"], sb);
 
   query(~[~"SET", ~"abc", ~"XXX"], sb);
   query(~[~"SET", ~"def", ~"123"], sb);
