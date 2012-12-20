@@ -6,7 +6,7 @@ use io::{ReaderUtil,WriterUtil};
 enum Result {
   Nil,
   Int(int),
-  Data(~str),
+  Data(~[u8]),
   List(~[Result]),
   Error(~str),
   Status(~str)
@@ -17,9 +17,9 @@ priv fn parse_data(len: uint, sb: net::tcp::TcpSocketBuf) -> Result {
     if (len > 0) {
       let bytes = sb.read_bytes(len as uint);
       assert bytes.len() == len;
-      Data(str::from_bytes(bytes))
+      Data(bytes)
     } else {
-      Data(~"")
+      Data(~[])
     };
   assert sb.read_char() == '\r';
   assert sb.read_char() == '\n';
