@@ -24,6 +24,7 @@
   enum Inside {
     in_nothing,
     in_number,
+    in_number_digits_only,
     in_number_done,
     in_number_need_newline,
     in_data,
@@ -40,6 +41,7 @@
     mut data_size: uint,
     mut data_have: uint,
     mut number: uint,
+    mut negative_number: bool,
     mut stack: ~[(uint, uint)] // (len, idx)
   }
 
@@ -69,6 +71,22 @@
     }
   }
 
+  trait Visitor {
+    fn on_list(rec: int, len: uint);
+    //fn on_list_elt(rec: int, len: uint);
+  }
+
+// keep recursion in visitor?
+  struct MyVisitor {
+    i: int
+  }
+
+  impl MyVisitor : Visitor {
+    fn on_list(rec: int, len: uint) {
+      error!("on_list(len: %u)", len)
+    }
+  }
+
   fn parse_redis(st: &mut RedisState, buf: &r/[u8]) -> (RedisResult, &r/[u8]) {
     let mut buf = buf;
 
@@ -76,7 +94,6 @@
       match st.in {
         in_nothing => {
           if (buf.is_empty()) {break}
-          error!("in_nothing");
 
           let (c, b) = take_head(buf);
           buf = b;
@@ -89,16 +106,19 @@
                 st.typ = TyList;
                 st.in = in_number;
                 st.number = 0;
+                st.negative_number = false;
               }
             '$' => {
                 st.typ = TyData;
                 st.in = in_number;
                 st.number = 0;
+                st.negative_number = false;
              }
             ':' => {
                 st.typ = TyInt;
                 st.in = in_number;
                 st.number = 0;
+                st.negative_number = false;
              }
 
              _ => {
@@ -145,7 +165,6 @@
 
         in_number_need_newline => {
           if (buf.is_empty()) {break}
-          error!("in_number_need_newline");
           let (c, b) = take_head(buf);
           buf = b;
           if c == ('\n' as u8) {
@@ -155,39 +174,57 @@
             return (Error, buf)
           }
         }
-        // XXX: Negative numbers
      
         // XXX: make a function instead of a STATE
         in_number_done => {
-          error!("in_number_done");
           match st.typ {
             TyData => {
-              st.data_size = st.number;
-              st.data_have = 0;
-              st.in = in_data;
+              if st.negative_number {
+                if st.number == 1 {
+                  error!("GOT NIL VALUE");
+                  st.in = in_nothing;
+                  if element_done(st) {
+                    return (Finished, buf)
+                  }
+                }
+                else {
+                  return (Error, buf)
+                }
+              }
+              else {
+                st.data_size = st.number;
+                st.data_have = 0;
+                st.in = in_data;
+              }
             }
             TyList => {
               // XXX:
               // push current recursion level and index on stack
               st.in = in_nothing;
-              if st.number > 0 {
-                vec::push(&mut st.stack, (st.number, 0));
-              }
-              else if st.number == 0 {
-                if element_done(st) {
-                  return (Finished, buf)
+              if st.negative_number {
+                if (st.number == 1) {
+                  // NIL
+                  if element_done(st) {
+                    return (Finished, buf)
+                  }
                 }
-              } else if (st.number == -1) {
-                // NIL
-                if element_done(st) {
-                  return (Finished, buf)
+                else {
+                  return (Error, buf)
                 }
               }
               else {
-                return (Error, buf)
+                if st.number > 0 {
+                  vec::push(&mut st.stack, (st.number, 0));
+                }
+                else {
+                  error!("GOT EMPTY LIST");
+                  if element_done(st) {
+                    return (Finished, buf)
+                  }
+                }
               }
-                
             }
+
             TyInt => {
               error!("GOT INTEGER: %?", st.number);
               st.in = in_nothing;
@@ -201,9 +238,8 @@
           }
         }
   
-        in_number => {
+        in_number | in_number_digits_only => {
           if (buf.is_empty()) {break}
-          error!("in_number");
           let (c, b) = take_head(buf);
           buf = b;
 
@@ -211,6 +247,19 @@
             st.number *= 10;
             st.number += (c - ('0' as u8)) as uint;
             error!("number: %?", st.number);
+            st.in = in_number_digits_only;
+          }
+          else if c as char == '-' {
+            error!("NEGATIVE NUMBER");
+            match st.in {
+              in_number_digits_only => {
+                return (Error, buf)
+              }
+              _ => {
+                st.negative_number = true;
+                st.in = in_number_digits_only;
+              }
+            }
           }
           else if c as char == '\r' || c as char == ' ' {
             error!("number need newline");
@@ -240,12 +289,13 @@ fn main() {
     data_size: 0,
     data_have: 0,
     number: 0,
+    negative_number: false,
     stack: ~[]
   }; 
 
   error!("%?", st);
 
-  let s = ~"*3\r\n$3\r\nabc\r\n:123\n:1\n";
+  let s = ~"*4\r\n$3\r\nabc\r\n:123\n:1\n$-1\n";
   do str::as_bytes(&s) |v| {
     let x = parse_redis(&mut st, vec::view(*v, 0, (*v).len() - 1)); 
     error!("%?", st);
