@@ -31,10 +31,6 @@
     //in_data_need_newline
   }
 
-  //in_number(TYPE), 
-  //in_number_done(TYPE),
-  //in_number_need_newline(TYPE)
-
   struct RedisState {
     mut in: Inside,
     mut typ: RedisType,
@@ -42,7 +38,6 @@
     mut data_have: uint,
     mut number: uint,
     mut negative_number: bool,
-    mut stack: ~[(uint, uint)] // (len, idx)
   }
 
   enum RedisResult {
@@ -51,19 +46,37 @@
     Error
   }
   
+  // Return
+  trait Visitor {
+    fn on_list(&mut self, len: uint) -> bool;
+
+    fn on_data_beg(&mut self, len: uint);
+    fn on_data(&mut self, data: &[u8]);
+    fn on_data_end(&mut self) -> bool;
+
+    fn on_integer(&mut self, num: uint, sign: bool) -> bool;
+
+    fn on_nil(&mut self) -> bool;
+  }
+
+// keep recursion in visitor?
+  struct MyVisitor {
+    mut stack: ~[(uint, uint)] // (len, idx)
+  }
+
   // returns true if we are finished parsing a redis request
-  fn element_done(st: &mut RedisState) -> bool {
-    if st.stack.is_empty() {
+  fn element_done(visitor: &mut MyVisitor) -> bool {
+    if visitor.stack.is_empty() {
       true
     }
     else {
-      let (len, idx) = st.stack.last();
+      let (len, idx) = visitor.stack.last();
       assert idx+1 <= len;
-      st.stack[st.stack.len()-1] = (len, idx+1);
+      visitor.stack[visitor.stack.len()-1] = (len, idx+1);
       if idx + 1 == len {
         error!("Finsihed list");
-        let _ = vec::pop(&mut st.stack); 
-        element_done(st)
+        let _ = vec::pop(&mut visitor.stack); 
+        element_done(visitor)
       }
       else {
         false
@@ -71,23 +84,43 @@
     }
   }
 
-  trait Visitor {
-    fn on_list(rec: int, len: uint);
-    //fn on_list_elt(rec: int, len: uint);
-  }
-
-// keep recursion in visitor?
-  struct MyVisitor {
-    i: int
-  }
-
   impl MyVisitor : Visitor {
-    fn on_list(rec: int, len: uint) {
-      error!("on_list(len: %u)", len)
+    fn on_list(&mut self, len: uint) -> bool {
+      error!("on_list(len: %u)", len);
+      if len == 0 {
+        element_done(self)
+      }
+      else {
+        vec::push(&mut self.stack, (len, 0));
+        false
+      }
+    }
+
+    fn on_data_beg(&mut self, len: uint) {
+      error!("on_data_beg(len: %u)", len)
+    }
+
+    fn on_data(&mut self, data: &[u8]) {
+      error!("on_data(%?)", data)
+    }
+
+    fn on_data_end(&mut self) -> bool {
+      error!("on_data_end()");
+      element_done(self)
+    }
+
+    fn on_integer(&mut self, num: uint, sign: bool) -> bool {
+      error!("on_integer(%?, %?)", num, sign);
+      element_done(self)
+    }
+
+    fn on_nil(&mut self) -> bool {
+      error!("on_nil");
+      element_done(self)
     }
   }
 
-  fn parse_redis(st: &mut RedisState, buf: &r/[u8]) -> (RedisResult, &r/[u8]) {
+  fn parse_redis<V: Visitor>(st: &mut RedisState, buf: &r/[u8], visitor: &mut V) -> (RedisResult, &r/[u8]) {
     let mut buf = buf;
 
     loop {
@@ -128,18 +161,17 @@
 
         }
 
-        in_data => { 
+        in_data => {
           if (buf.is_empty()) {break}
           let (data, b) = take_atmost_n(buf, st.data_size - st.data_have);
           buf = b;
-          error!("GOT data: %?", data);
+          visitor.on_data(data);
           st.data_have += data.len();
           assert st.data_have <= st.data_size;
           if st.data_have == st.data_size {
-            error!("GOT DATA COMPLETE");
-            //st.in = in_data_need_newline;
+            //XXX: st.in = in_data_need_newline;
             st.in = in_nothing;
-            if element_done(st) {
+            if visitor.on_data_end() {
               return (Finished, buf)
             }
           }
@@ -181,9 +213,8 @@
             TyData => {
               if st.negative_number {
                 if st.number == 1 {
-                  error!("GOT NIL VALUE");
                   st.in = in_nothing;
-                  if element_done(st) {
+                  if visitor.on_nil() {
                     return (Finished, buf)
                   }
                 }
@@ -195,6 +226,7 @@
                 st.data_size = st.number;
                 st.data_have = 0;
                 st.in = in_data;
+                visitor.on_data_beg(st.data_size);
               }
             }
             TyList => {
@@ -203,8 +235,7 @@
               st.in = in_nothing;
               if st.negative_number {
                 if (st.number == 1) {
-                  // NIL
-                  if element_done(st) {
+                  if visitor.on_nil() {
                     return (Finished, buf)
                   }
                 }
@@ -213,22 +244,15 @@
                 }
               }
               else {
-                if st.number > 0 {
-                  vec::push(&mut st.stack, (st.number, 0));
-                }
-                else {
-                  error!("GOT EMPTY LIST");
-                  if element_done(st) {
-                    return (Finished, buf)
-                  }
+                if visitor.on_list(st.number) {
+                  return (Finished, buf)
                 }
               }
             }
 
             TyInt => {
-              error!("GOT INTEGER: %?", st.number);
               st.in = in_nothing;
-              if element_done(st) {
+              if visitor.on_integer(st.number, st.negative_number) {
                 return (Finished, buf)
               }
             }
@@ -246,11 +270,9 @@
           if c >= ('0' as u8) && c <= ('9' as u8) {
             st.number *= 10;
             st.number += (c - ('0' as u8)) as uint;
-            error!("number: %?", st.number);
             st.in = in_number_digits_only;
           }
           else if c as char == '-' {
-            error!("NEGATIVE NUMBER");
             match st.in {
               in_number_digits_only => {
                 return (Error, buf)
@@ -262,11 +284,9 @@
             }
           }
           else if c as char == '\r' || c as char == ' ' {
-            error!("number need newline");
             st.in = in_number_need_newline;
           }
           else if c as char == '\n' {
-            error!("number finsihed");
             st.in = in_number_done;
           }
           else {
@@ -290,14 +310,15 @@ fn main() {
     data_have: 0,
     number: 0,
     negative_number: false,
-    stack: ~[]
   }; 
 
   error!("%?", st);
 
+  let mut visitor = MyVisitor {stack: ~[]};
+
   let s = ~"*4\r\n$3\r\nabc\r\n:123\n:1\n$-1\n";
   do str::as_bytes(&s) |v| {
-    let x = parse_redis(&mut st, vec::view(*v, 0, (*v).len() - 1)); 
+    let x = parse_redis(&mut st, vec::view(*v, 0, (*v).len() - 1), &mut visitor);
     error!("%?", st);
     error!("%?", x);
   }
