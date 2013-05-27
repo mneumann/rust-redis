@@ -22,7 +22,7 @@ enum RedisType {
 }
 
 enum Inside {
-  in_nothing,
+  in_start,
   in_number,
   in_number_digits_only,
   in_number_done,
@@ -34,9 +34,8 @@ enum Inside {
 struct RedisState {
   in: Inside,
   typ: RedisType,
-  data_size: uint,
   data_have: uint,
-  number: uint,
+  number: uint, // also stores the data_size
   negative_number: bool,
 }
 
@@ -140,8 +139,9 @@ fn parse_redis<'r, V: Visitor>(st: &mut RedisState, buf: &'r [u8], visitor: &mut
   let mut buf = buf;
 
   loop {
+
     match st.in {
-      in_nothing => {
+      in_start => {
         if (buf.is_empty()) {break}
 
         let (c, b) = take_head(buf);
@@ -177,39 +177,51 @@ fn parse_redis<'r, V: Visitor>(st: &mut RedisState, buf: &'r [u8], visitor: &mut
 
       }
 
-      in_data => {
-        if (buf.is_empty()) {break}
-        let (data, b) = take_atmost_n(buf, st.data_size - st.data_have);
-        buf = b;
-        visitor.on_data(data);
-        st.data_have += data.len();
-        assert!(st.data_have <= st.data_size);
-        if st.data_have == st.data_size {
-          //XXX: st.in = in_data_need_newline;
-          st.in = in_nothing;
-          if visitor.on_data_end() {
-            return (Finished, buf)
-          }
-        }
-      }
 
-      // we could treat the newline after data differently.
-/*
-      in_data_need_newline => {
+      in_number => {
         if (buf.is_empty()) {break}
         let (c, b) = take_head(buf);
         buf = b;
-        if c == ('\n' as u8) {
-          st.in = in_nothing;
+
+        if c >= ('0' as u8) && c <= ('9' as u8) {
+          st.number *= 10;
+          st.number += (c - ('0' as u8)) as uint;
+          st.in = in_number_digits_only;
         }
-        else if c == ('\r' as u8) || c == (' ' as u8) {
-          error("Consume whitespace");
+        else if c as char == '-' {
+          st.negative_number = true;
+          st.in = in_number_digits_only;
+        }
+        else if c as char == '\r' || c as char == ' ' {
+          st.in = in_number_need_newline;
+        }
+        else if c as char == '\n' {
+          st.in = in_number_done;
         }
         else {
           return (Error, buf)
         }
       }
-*/
+
+      in_number_digits_only => {
+        if (buf.is_empty()) {break}
+        let (c, b) = take_head(buf);
+        buf = b;
+
+        if c >= ('0' as u8) && c <= ('9' as u8) {
+          st.number *= 10;
+          st.number += (c - ('0' as u8)) as uint;
+        }
+        else if c as char == '\r' || c as char == ' ' {
+          st.in = in_number_need_newline;
+        }
+        else if c as char == '\n' {
+          st.in = in_number_done;
+        }
+        else {
+          return (Error, buf)
+        }
+      }
 
       in_number_need_newline => {
         if (buf.is_empty()) {break}
@@ -225,11 +237,12 @@ fn parse_redis<'r, V: Visitor>(st: &mut RedisState, buf: &'r [u8], visitor: &mut
    
       // XXX: make a function instead of a STATE
       in_number_done => {
+
         match st.typ {
-          TyData => {
+          TyData | TyList => {
             if st.negative_number {
               if st.number == 1 {
-                st.in = in_nothing;
+                st.in = in_start;
                 if visitor.on_nil() {
                   return (Finished, buf)
                 }
@@ -239,77 +252,50 @@ fn parse_redis<'r, V: Visitor>(st: &mut RedisState, buf: &'r [u8], visitor: &mut
               }
             }
             else {
-              st.data_size = st.number;
-              st.data_have = 0;
-              st.in = in_data;
-              visitor.on_data_beg(st.data_size);
-            }
-          }
-          TyList => {
-            // XXX:
-            // push current recursion level and index on stack
-            st.in = in_nothing;
-            if st.negative_number {
-              if (st.number == 1) {
-                if visitor.on_nil() {
-                  return (Finished, buf)
+              match st.typ {
+                TyData => {
+                  st.data_have = 0;
+                  st.in = in_data;
+                  visitor.on_data_beg(st.number);
                 }
-              }
-              else {
-                return (Error, buf)
-              }
-            }
-            else {
-              if visitor.on_list(st.number) {
-                return (Finished, buf)
+                TyList => {
+                  st.in = in_start;
+                  if visitor.on_list(st.number) {
+                    return (Finished, buf)
+                  }
+                }
+
+                _ => { fail!() }
               }
             }
           }
 
           TyInt => {
-            st.in = in_nothing;
+            st.in = in_start;
             if visitor.on_integer(st.number, st.negative_number) {
               return (Finished, buf)
             }
           }
-          _ => {
-            fail!(~"THIS SHOULD NEVER HAPPEN")
-          }
+
+          _ => { fail!() }
         }
       }
 
-      in_number | in_number_digits_only => {
+      in_data => {
         if (buf.is_empty()) {break}
-        let (c, b) = take_head(buf);
+        let (data, b) = take_atmost_n(buf, st.number - st.data_have);
         buf = b;
-
-        if c >= ('0' as u8) && c <= ('9' as u8) {
-          st.number *= 10;
-          st.number += (c - ('0' as u8)) as uint;
-          st.in = in_number_digits_only;
-        }
-        else if c as char == '-' {
-          match st.in {
-            in_number_digits_only => {
-              return (Error, buf)
-            }
-            _ => {
-              st.negative_number = true;
-              st.in = in_number_digits_only;
-            }
+        visitor.on_data(data);
+        st.data_have += data.len();
+        assert!(st.data_have <= st.number);
+        if st.data_have == st.number {
+          st.in = in_start;
+          if visitor.on_data_end() {
+            return (Finished, buf)
           }
         }
-        else if c as char == '\r' || c as char == ' ' {
-          st.in = in_number_need_newline;
-        }
-        else if c as char == '\n' {
-          st.in = in_number_done;
-        }
-        else {
-          return (Error, buf)
-        }
-
       }
+
     }
   }
   (NeedMore, buf)
@@ -318,9 +304,8 @@ fn parse_redis<'r, V: Visitor>(st: &mut RedisState, buf: &'r [u8], visitor: &mut
 
 fn main() {
   let mut st = RedisState {
-    in: in_nothing,
+    in: in_start,
     typ: TyNone, 
-    data_size: 0,
     data_have: 0,
     number: 0,
     negative_number: false,
