@@ -1,15 +1,15 @@
 
-  fn take_n(v: &r/[u8], n: uint) -> (&r/[u8], &r/[u8]) {
-    (vec::view(v, 0, n), vec::view(v, n, v.len()))
+  fn take_n<'r>(v: &'r [u8], n: uint) -> (&'r [u8], &'r [u8]) {
+    (vec::slice(v, 0, n), vec::slice(v, n, v.len()))
   }
 
-  fn take_atmost_n(v: &r/[u8], n: uint) -> (&r/[u8], &r/[u8]) {
+  fn take_atmost_n<'r>(v: &'r [u8], n: uint) -> (&'r [u8], &'r [u8]) {
     take_n(v, uint::min(n, v.len()))
   }
 
-  fn take_head(v: &r/[u8]) -> (u8, &r/[u8]) {
-    assert v.is_not_empty();
-    (v.head(), vec::view(v, 1, v.len()))
+  fn take_head<'r>(v: &'r [u8]) -> (u8, &'r [u8]) {
+    assert!(!v.is_empty());
+    (*v.head(), vec::slice(v, 1, v.len()))
   }
 
  
@@ -32,12 +32,12 @@
   }
 
   struct RedisState {
-    mut in: Inside,
-    mut typ: RedisType,
-    mut data_size: uint,
-    mut data_have: uint,
-    mut number: uint,
-    mut negative_number: bool,
+    in: Inside,
+    typ: RedisType,
+    data_size: uint,
+    data_have: uint,
+    number: uint,
+    negative_number: bool,
   }
 
   enum RedisResult {
@@ -45,7 +45,17 @@
     NeedMore,
     Error
   }
-  
+
+  enum Result {
+    Invalid,
+    Nil,
+    Int(int),
+    Data(~[u8]),
+    List(~[Result]),
+    Err(~str),
+    Status(~str)
+  }
+
   // Return
   trait Visitor {
     fn on_list(&mut self, len: uint) -> bool;
@@ -61,17 +71,22 @@
 
 // keep recursion in visitor?
   struct MyVisitor {
-    mut stack: ~[(uint, uint)] // (len, idx)
+    stack: ~[~[Result]], // (len, idx)
+    result: Result
   }
 
   // returns true if we are finished parsing a redis request
-  fn element_done(visitor: &mut MyVisitor) -> bool {
+  fn element_done(visitor: &mut MyVisitor, value: Result) -> bool {
     if visitor.stack.is_empty() {
+      visitor.result = value;
       true
     }
     else {
-      let (len, idx) = visitor.stack.last();
-      assert idx+1 <= len;
+      
+      vec::push(&mut (visitor.stack[0/*visitor.stack.len()-1*/]), value);
+      false
+/*      let (len, idx) = visitor.stack.last();
+      assert!(idx+1 <= len);
       visitor.stack[visitor.stack.len()-1] = (len, idx+1);
       if idx + 1 == len {
         error!("Finsihed list");
@@ -81,17 +96,18 @@
       else {
         false
       }
+*/
     }
   }
 
-  impl MyVisitor : Visitor {
+  impl Visitor for MyVisitor {
     fn on_list(&mut self, len: uint) -> bool {
       error!("on_list(len: %u)", len);
       if len == 0 {
-        element_done(self)
+        element_done(self, List(~[]))
       }
       else {
-        vec::push(&mut self.stack, (len, 0));
+        //vec::push(&mut self.stack, (len, 0));
         false
       }
     }
@@ -106,21 +122,21 @@
 
     fn on_data_end(&mut self) -> bool {
       error!("on_data_end()");
-      element_done(self)
+      element_done(self, Data(~[1,2,3]))
     }
 
     fn on_integer(&mut self, num: uint, sign: bool) -> bool {
       error!("on_integer(%?, %?)", num, sign);
-      element_done(self)
+      element_done(self, Int(num as int)) // XXX
     }
 
     fn on_nil(&mut self) -> bool {
       error!("on_nil");
-      element_done(self)
+      element_done(self, Nil)
     }
   }
 
-  fn parse_redis<V: Visitor>(st: &mut RedisState, buf: &r/[u8], visitor: &mut V) -> (RedisResult, &r/[u8]) {
+  fn parse_redis<'r, V: Visitor>(st: &mut RedisState, buf: &'r [u8], visitor: &mut V) -> (RedisResult, &'r [u8]) {
     let mut buf = buf;
 
     loop {
@@ -167,7 +183,7 @@
           buf = b;
           visitor.on_data(data);
           st.data_have += data.len();
-          assert st.data_have <= st.data_size;
+          assert!(st.data_have <= st.data_size);
           if st.data_have == st.data_size {
             //XXX: st.in = in_data_need_newline;
             st.in = in_nothing;
@@ -257,7 +273,7 @@
               }
             }
             _ => {
-              fail ~"THIS SHOULD NEVER HAPPEN"
+              fail!(~"THIS SHOULD NEVER HAPPEN")
             }
           }
         }
@@ -301,8 +317,6 @@
 
 
 fn main() {
-
-
   let mut st = RedisState {
     in: in_nothing,
     typ: TyNone, 
@@ -314,13 +328,12 @@ fn main() {
 
   error!("%?", st);
 
-  let mut visitor = MyVisitor {stack: ~[]};
+  let mut visitor = MyVisitor {stack: ~[], result: Invalid};
 
   let s = ~"*4\r\n$3\r\nabc\r\n:123\n:1\n$-1\n";
-  do str::as_bytes(&s) |v| {
-    let x = parse_redis(&mut st, vec::view(*v, 0, (*v).len() - 1), &mut visitor);
-    error!("%?", st);
-    error!("%?", x);
-  }
-
+  let slice = str::as_bytes_slice(s);
+  let x = parse_redis(&mut st, slice, &mut visitor);
+  error!("%?", st);
+  error!("%?", x);
+  error!("%?", visitor.result);
 }
