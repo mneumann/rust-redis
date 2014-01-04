@@ -1,17 +1,11 @@
 extern mod extra;
 extern mod green;
-use redis::{Redis};
-use std::io::net::ip::SocketAddr;
-use std::io::net::tcp::TcpStream;
-use std::io::buffered::BufferedStream;
+use redis::Redis;
 
 mod redis;
 
 fn bench_set(n: uint) {
-  let addr = from_str::<SocketAddr>("127.0.0.1:6379").unwrap();
-  let tcp_stream = TcpStream::connect(addr).unwrap();
-  let mut reader = BufferedStream::new(tcp_stream);
-  let mut redis = Redis::new(&mut reader);
+  let mut redis = Redis::new("127.0.0.1:6379");
 
   for _ in range(0, n) {
     redis.set("key", "12");

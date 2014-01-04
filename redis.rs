@@ -1,4 +1,6 @@
 use std::io::buffered::BufferedStream;
+use std::io::net::ip::SocketAddr;
+use std::io::net::tcp::TcpStream;
 use std::io::Stream;
 use std::vec::bytes::push_bytes;
 use std::vec;
@@ -161,13 +163,21 @@ fn execute<T: Stream>(cmd: &[u8], io: &mut BufferedStream<T>) -> Result {
   parse_response(io)
 }
 
-pub struct Redis<'a, T> {
-  priv io: &'a mut BufferedStream<T>
+pub struct Redis<T> {
+  priv io: BufferedStream<T>
 }
 
-impl<'a, T: Stream> Redis<'a, T> {
-  pub fn new(io: &'a mut BufferedStream<T>) -> Redis<'a, T> {
-    Redis { io: io }
+impl Redis<TcpStream> {
+  pub fn new(sock_addr: &str) -> Redis<TcpStream> {
+    let addr = from_str::<SocketAddr>(sock_addr).unwrap();
+    let tcp_stream = TcpStream::connect(addr).unwrap();
+    Redis::new_from_stream(tcp_stream)
+  }
+}
+
+impl<T: Stream> Redis<T> {
+  pub fn new_from_stream(io: T) -> Redis<T> {
+    Redis { io: BufferedStream::new(io) }
   }
 
   pub fn get(&mut self, key: &str) -> Result {
@@ -175,7 +185,7 @@ impl<'a, T: Stream> Redis<'a, T> {
     cwr.args(2);
     cwr.arg("GET");
     cwr.arg(key);
-    cwr.with_buf(|cmd| execute(cmd, self.io))
+    cwr.with_buf(|cmd| execute(cmd, &mut self.io))
   }
   
   pub fn set(&mut self, key: &str, val: &str) -> Result {
@@ -184,6 +194,6 @@ impl<'a, T: Stream> Redis<'a, T> {
     cwr.arg("SET");
     cwr.arg(key);
     cwr.arg(val);
-    cwr.with_buf(|cmd| execute(cmd, self.io))
+    cwr.with_buf(|cmd| execute(cmd, &mut self.io))
   }
 }
