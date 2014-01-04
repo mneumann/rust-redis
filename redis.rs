@@ -101,44 +101,99 @@ fn parse_response(io: &mut BufferedStream<TcpStream>) -> Result {
   }
 }
 
-fn prepare_cmd(cmd: ~[~str]) -> ~[u8] {
-  let mut res: ~[u8] = ~[];
-  push_bytes(&mut res, bytes!("*"));
-  push_bytes(&mut res, cmd.len().to_str().into_bytes());
-  push_bytes(&mut res, bytes!("\r\n"));
-  for c in cmd.iter() {
-    push_bytes(&mut res, bytes!("$"));
-    push_bytes(&mut res, c.len().to_str().into_bytes());
-    push_bytes(&mut res, bytes!("\r\n"));
-    push_bytes(&mut res, c.as_bytes());
-    push_bytes(&mut res, bytes!("\r\n"));
-  }
-  res
+struct CommandWriter {
+  buf: ~[u8]
 }
 
-fn send_query(cmd: &[u8], io: &mut BufferedStream<TcpStream>) {
+impl CommandWriter {
+  fn new() -> CommandWriter {
+    CommandWriter { buf: ~[] }
+  }
+
+  fn args(&mut self, n: uint) {
+    self.write_char('*');
+    self.write_uint(n);
+    self.write_crnl();
+  }
+
+  fn arg(&mut self, arg: &str) {
+    self.write_char('$');
+    self.write_uint(arg.len());
+    self.write_crnl();
+    self.write_str(arg);
+    self.write_crnl();
+  }
+
+  fn write_crnl(&mut self) {
+    self.write_byte(13);
+    self.write_byte(10);
+  }
+
+  fn write_uint(&mut self, n: uint) {
+    if n < 10 {
+      self.write_byte('0' as u8 + (n as u8));
+    }
+    else {
+      push_bytes(&mut self.buf, n.to_str().into_bytes());
+    }
+  }
+
+  fn write_str(&mut self, s: &str) {
+    push_bytes(&mut self.buf, s.as_bytes());
+  }
+
+  fn write_char(&mut self, s: char) {
+    self.buf.push(s as u8);
+  }
+
+  fn write_byte(&mut self, b: u8) {
+    self.buf.push(b);
+  }
+
+  fn with_buf<T>(&self, f: |&[u8]| -> T) -> T {
+    f(self.buf.as_slice())
+  }
+}
+
+fn execute(cmd: &[u8], io: &mut BufferedStream<TcpStream>) -> Result {
   io.write(cmd);
   io.flush();
-}
-
-fn recv_query(io: &mut BufferedStream<TcpStream>) -> Result {
   parse_response(io)
 }
 
-fn query(cmd: &[u8], io: &mut BufferedStream<TcpStream>) -> Result {
-  send_query(cmd, io);
-  let res = recv_query(io);
-  res
+pub struct Redis<'a> {
+  priv io: &'a mut BufferedStream<TcpStream>
+}
+
+impl<'a> Redis<'a> {
+  pub fn get(&mut self, key: &str) -> Result {
+    let mut cwr = CommandWriter::new();
+    cwr.args(2);
+    cwr.arg("GET");
+    cwr.arg(key);
+    cwr.with_buf(|cmd| execute(cmd, self.io))
+  }
+  
+  pub fn set(&mut self, key: &str, val: &str) -> Result {
+    let mut cwr = CommandWriter::new();
+    cwr.args(3);
+    cwr.arg("SET");
+    cwr.arg(key);
+    cwr.arg(val);
+    cwr.with_buf(|cmd| execute(cmd, self.io))
+  }
 }
 
 fn main() {
   let addr = from_str::<SocketAddr>("127.0.0.1:6379").unwrap();
   let tcp_stream = TcpStream::connect(addr).unwrap();
   let mut reader = BufferedStream::new(tcp_stream);
+  let mut redis = Redis { io: &mut reader };
 
-  let cmd = prepare_cmd(~[~"SET", ~"def", ~"abc"]);
- 
+  //let x = redis.get("key");
+  //println!("{:?}", x);
+
   for i in std::iter::range(1, 100_000) {
-    query(cmd, &mut reader);
+    redis.set("key", "abc");
   }
 }
