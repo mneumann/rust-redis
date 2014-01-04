@@ -1,8 +1,7 @@
+extern mod redis = "redis#0.1";
 extern mod extra;
 extern mod green;
 use redis::Redis;
-
-mod redis;
 
 fn bench_set(n: uint) {
   let mut redis = Redis::new("127.0.0.1:6379");

@@ -1,4 +1,8 @@
-RUSTC=rustc
+build:
+	rustpkg build bench
 
-bench: redis.rs bench.rs Makefile
-	${RUSTC} -O bench.rs
+install:
+	rustpkg install bench
+
+clean:
+	rustpkg clean

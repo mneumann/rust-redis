@@ -18,8 +18,8 @@ against redis-benchmark.
     redis-benchmark -n 100000 -c 4 -t set # ~36000 reqs/sec
     redis-benchmark -n 100000 -c 8 -t set # ~47000 reqs/sec
 
-    ./bench 1 100000 # ~24000 reqs/sec
-    ./bench 2  50000 # ~24000 reqs/sec
+    ./bin/bench 1 100000 # ~24000 reqs/sec
+    ./bin/bench 2  50000 # ~24000 reqs/sec
     ... # ~24000 reqs/sec
 
 At this simple benchmark, rust-redis consistently shows about 24000 requests
