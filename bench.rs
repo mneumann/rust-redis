@@ -1,4 +1,5 @@
 extern mod extra;
+extern mod green;
 use redis::{Redis};
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::TcpStream;
@@ -18,28 +19,22 @@ fn bench_set(n: uint) {
 }
 
 fn main() {
+  let before = extra::time::precise_time_ns();
+
   let concurrency: uint = from_str(std::os::args()[1]).unwrap();
   let repeats: uint = from_str(std::os::args()[2]).unwrap();
   let total_reqs = concurrency * repeats;
- 
-  let before = extra::time::precise_time_ns();
 
-  let mut tasks: ~[std::comm::Port<std::task::TaskResult>] = ~[];
+  let mut pool = green::SchedPool::new(green::PoolConfig { threads: concurrency, event_loop_factory: None });
 
   for i in range(0, concurrency) {
     println!("Client {} started", i);
-    let mut t = std::task::task();
-    tasks.push(t.future_result());
-    do t.spawn {
+    do pool.spawn(std::task::TaskOpts::new()) {
       bench_set(repeats);
     }
   }
   println!("Waiting for all clients to terminate");
-
-  for future in tasks.iter() {
-    let res = future.recv();
-    //println!("Task finsihed with: {:?}", res);
-  }
+  pool.shutdown();
 
   let after = extra::time::precise_time_ns();
 
