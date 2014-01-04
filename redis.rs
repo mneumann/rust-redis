@@ -1,8 +1,7 @@
 use std::io::buffered::BufferedStream;
 use std::io::Stream;
-use std::io::net::ip::SocketAddr;
-use std::io::net::tcp::TcpStream;
 use std::vec::bytes::push_bytes;
+use std::vec;
 
 pub enum Result {
   Nil,
@@ -35,7 +34,7 @@ fn parse_data<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> Result {
 }
 
 fn parse_list<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> Result {
-  List(std::vec::from_fn(len, |_| { parse_response(io) }))
+  List(vec::from_fn(len, |_| { parse_response(io) }))
 }
 
 fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> int {
@@ -167,6 +166,10 @@ pub struct Redis<'a, T> {
 }
 
 impl<'a, T: Stream> Redis<'a, T> {
+  pub fn new(io: &'a mut BufferedStream<T>) -> Redis<'a, T> {
+    Redis { io: io }
+  }
+
   pub fn get(&mut self, key: &str) -> Result {
     let mut cwr = CommandWriter::new();
     cwr.args(2);
@@ -182,19 +185,5 @@ impl<'a, T: Stream> Redis<'a, T> {
     cwr.arg(key);
     cwr.arg(val);
     cwr.with_buf(|cmd| execute(cmd, self.io))
-  }
-}
-
-fn main() {
-  let addr = from_str::<SocketAddr>("127.0.0.1:6379").unwrap();
-  let tcp_stream = TcpStream::connect(addr).unwrap();
-  let mut reader = BufferedStream::new(tcp_stream);
-  let mut redis = Redis { io: &mut reader };
-
-  //let x = redis.get("key");
-  //println!("{:?}", x);
-
-  for i in std::iter::range(1, 100_000) {
-    redis.set("key", "abc");
   }
 }

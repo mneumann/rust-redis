@@ -1,4 +1,4 @@
 RUSTC=rustc
 
-redis: redis.rs Makefile
-	${RUSTC} -O redis.rs
+bench: redis.rs bench.rs Makefile
+	${RUSTC} -O bench.rs
