@@ -22,6 +22,11 @@ against redis-benchmark.
     ./bench 2  50000 # ~24000 reqs/sec
     ... # ~24000 reqs/sec
 
+At this simple benchmark, rust-redis consistently shows about 24000 requests
+per second regardless of concurrency. I think this is because the way
+scheduling works. Using native threads would probably lead to the same
+performance as redis-benchmark.
+
 ## License
 
 rust-redis is under the MIT license, see LICENSE-MIT for details.
