@@ -1,4 +1,5 @@
 use std::io::buffered::BufferedStream;
+use std::io::Stream;
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::TcpStream;
 use std::vec::bytes::push_bytes;
@@ -12,14 +13,14 @@ pub enum Result {
   Status(~str)
 }
 
-fn read_char(io: &mut BufferedStream<TcpStream>) -> char {
+fn read_char<T: Stream>(io: &mut BufferedStream<T>) -> char {
   match io.read_byte() {
     Some(ch) => ch as char,
     None     => fail!()
   }
 }
 
-fn parse_data(len: uint, io: &mut BufferedStream<TcpStream>) -> Result {
+fn parse_data<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> Result {
   let res =
     if (len > 0) {
       let bytes = io.read_bytes(len);
@@ -33,11 +34,11 @@ fn parse_data(len: uint, io: &mut BufferedStream<TcpStream>) -> Result {
   return res;
 }
 
-fn parse_list(len: uint, io: &mut BufferedStream<TcpStream>) -> Result {
+fn parse_list<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> Result {
   List(std::vec::from_fn(len, |_| { parse_response(io) }))
 }
 
-fn parse_int_line(io: &mut BufferedStream<TcpStream>) -> int {
+fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> int {
   let mut i: int = 0;
   let mut digits: uint = 0;
   let mut negative: bool = false;
@@ -68,7 +69,7 @@ fn parse_int_line(io: &mut BufferedStream<TcpStream>) -> int {
   else { i }
 }
 
-fn parse_n(io: &mut BufferedStream<TcpStream>, f: |uint, &mut BufferedStream<TcpStream>| -> Result) -> Result {
+fn parse_n<T: Stream>(io: &mut BufferedStream<T>, f: |uint, &mut BufferedStream<T>| -> Result) -> Result {
   match parse_int_line(io) {
     -1 => Nil,
     len if len >= 0 => f(len as uint, io),
@@ -76,21 +77,21 @@ fn parse_n(io: &mut BufferedStream<TcpStream>, f: |uint, &mut BufferedStream<Tcp
   }
 }
 
-fn parse_status(io: &mut BufferedStream<TcpStream>) -> Result {
+fn parse_status<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   match io.read_line() {
     Some(line) => Status(line),
     None       => fail!()
   }
 }
 
-fn parse_error(io: &mut BufferedStream<TcpStream>) -> Result {
+fn parse_error<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   match io.read_line() {
     Some(line) => Error(line),
     None       => fail!()
   }
 }
 
-fn parse_response(io: &mut BufferedStream<TcpStream>) -> Result {
+fn parse_response<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   match read_char(io) {
     '$' => parse_n(io, parse_data),
     '*' => parse_n(io, parse_list),
@@ -155,17 +156,17 @@ impl CommandWriter {
   }
 }
 
-fn execute(cmd: &[u8], io: &mut BufferedStream<TcpStream>) -> Result {
+fn execute<T: Stream>(cmd: &[u8], io: &mut BufferedStream<T>) -> Result {
   io.write(cmd);
   io.flush();
   parse_response(io)
 }
 
-pub struct Redis<'a> {
-  priv io: &'a mut BufferedStream<TcpStream>
+pub struct Redis<'a, T> {
+  priv io: &'a mut BufferedStream<T>
 }
 
-impl<'a> Redis<'a> {
+impl<'a, T: Stream> Redis<'a, T> {
   pub fn get(&mut self, key: &str) -> Result {
     let mut cwr = CommandWriter::new();
     cwr.args(2);
