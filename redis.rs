@@ -28,8 +28,8 @@ fn parse_data(len: uint, io: &mut BufferedStream<TcpStream>) -> Result {
     } else {
       Data(~[])
     };
-  assert!(io.read_byte() == Some(13));
-  assert!(io.read_byte() == Some(10));
+  assert!(read_char(io) == '\r');
+  assert!(read_char(io) == '\n');
   return res;
 }
 
@@ -125,8 +125,8 @@ impl CommandWriter {
   }
 
   fn write_crnl(&mut self) {
-    self.write_byte(13);
-    self.write_byte(10);
+    self.write_char('\r');
+    self.write_char('\n');
   }
 
   fn write_uint(&mut self, n: uint) {
