@@ -1,10 +1,10 @@
 extern mod redis = "redis#0.1";
 extern mod extra;
 extern mod green;
-use redis::Redis;
+use redis::Client;
 
 fn bench_set(n: uint) {
-  let mut redis = Redis::new("127.0.0.1:6379");
+  let mut redis = Client::new("127.0.0.1:6379");
 
   for _ in range(0, n) {
     redis.set("key", "12");

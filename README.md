@@ -14,7 +14,7 @@ A [Rust][rust-home] client library for [Redis][redis-home].
 extern mod redis = "redis#0.1";
 
 fn main() {
-  let mut redis = redis::Redis::new("127.0.0.1:6379");
+  let mut redis = redis::Client::new("127.0.0.1:6379");
   redis.set("key", "123");
 
   match redis.get("key") {

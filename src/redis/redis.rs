@@ -163,21 +163,21 @@ fn execute<T: Stream>(cmd: &[u8], io: &mut BufferedStream<T>) -> Result {
   parse_response(io)
 }
 
-pub struct Redis<T> {
+pub struct Client<T> {
   priv io: BufferedStream<T>
 }
 
-impl Redis<TcpStream> {
-  pub fn new(sock_addr: &str) -> Redis<TcpStream> {
+impl Client<TcpStream> {
+  pub fn new(sock_addr: &str) -> Client<TcpStream> {
     let addr = from_str::<SocketAddr>(sock_addr).unwrap();
     let tcp_stream = TcpStream::connect(addr).unwrap();
-    Redis::new_from_stream(tcp_stream)
+    Client::new_from_stream(tcp_stream)
   }
 }
 
-impl<T: Stream> Redis<T> {
-  pub fn new_from_stream(io: T) -> Redis<T> {
-    Redis { io: BufferedStream::new(io) }
+impl<T: Stream> Client<T> {
+  pub fn new_from_stream(io: T) -> Client<T> {
+    Client { io: BufferedStream::new(io) }
   }
 
   pub fn get(&mut self, key: &str) -> Result {
