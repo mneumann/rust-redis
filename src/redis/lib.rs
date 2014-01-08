@@ -3,5 +3,5 @@
 #[license = "MIT"];
 #[crate_type = "lib"];
 
-pub use redis::{Result,Client,Nil,Int,Data,List,Error,Status};
+pub use redis::{Result,Client,Nil,Int,Data,List,Error,Status,ProtocolError};
 pub mod redis;
