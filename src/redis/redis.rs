@@ -50,7 +50,7 @@ fn parse_list<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> Result {
   let mut list: ~[Result] = vec::with_capacity(len);
 
   for _ in range(0, len) {
-    match parse_response(io) {
+    match parse(io) {
       ProtocolError(err) => {
         return ProtocolError(err);
       }
@@ -120,7 +120,7 @@ fn parse_error<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   }
 }
 
-fn parse_response<T: Stream>(io: &mut BufferedStream<T>) -> Result {
+pub fn parse<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   match read_char(io) {
     Some('$') => parse_n(io, parse_data),
     Some('*') => parse_n(io, parse_list),
@@ -137,26 +137,51 @@ fn parse_response<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   }
 }
 
-struct CommandWriter {
+pub struct CommandWriter {
   buf: ~[u8]
 }
 
 impl CommandWriter {
-  fn new() -> CommandWriter {
+  pub fn new() -> CommandWriter {
     CommandWriter { buf: ~[] }
   }
 
-  fn args(&mut self, n: uint) {
+  pub fn args(&mut self, n: uint) {
     self.write_char('*');
     self.write_uint(n);
     self.write_crnl();
   }
 
-  fn arg(&mut self, arg: &str) {
+  pub fn arg_bin(&mut self, arg: &[u8]) {
+    self.write_char('$');
+    self.write_uint(arg.len());
+    self.write_crnl();
+    self.write(arg);
+    self.write_crnl();
+  }
+
+  pub fn nil(&mut self) {
+    self.write_str("$-1");
+    self.write_crnl();
+  }
+
+  pub fn arg_str(&mut self, arg: &str) {
     self.write_char('$');
     self.write_uint(arg.len());
     self.write_crnl();
     self.write_str(arg);
+    self.write_crnl();
+  }
+
+  pub fn error(&mut self, err: &str) {
+    self.write_char('-');
+    self.write_str(err);
+    self.write_crnl();
+  }
+
+  pub fn status(&mut self, status: &str) {
+    self.write_char('+');
+    self.write_str(status);
     self.write_crnl();
   }
 
@@ -178,6 +203,10 @@ impl CommandWriter {
     push_bytes(&mut self.buf, s.as_bytes());
   }
 
+  fn write(&mut self, s: &[u8]) {
+    push_bytes(&mut self.buf, s);
+  }
+ 
   fn write_char(&mut self, s: char) {
     self.buf.push(s as u8);
   }
@@ -186,7 +215,7 @@ impl CommandWriter {
     self.buf.push(b);
   }
 
-  fn with_buf<T>(&self, f: |&[u8]| -> T) -> T {
+  pub fn with_buf<T>(&self, f: |&[u8]| -> T) -> T {
     f(self.buf.as_slice())
   }
 }
@@ -194,7 +223,7 @@ impl CommandWriter {
 fn execute<T: Stream>(cmd: &[u8], io: &mut BufferedStream<T>) -> Result {
   io.write(cmd);
   io.flush();
-  parse_response(io)
+  parse(io)
 }
 
 pub struct Client<T> {
@@ -217,17 +246,17 @@ impl<T: Stream> Client<T> {
   pub fn get(&mut self, key: &str) -> Result {
     let mut cwr = CommandWriter::new();
     cwr.args(2);
-    cwr.arg("GET");
-    cwr.arg(key);
+    cwr.arg_str("GET");
+    cwr.arg_str(key);
     cwr.with_buf(|cmd| execute(cmd, &mut self.io))
   }
   
   pub fn set(&mut self, key: &str, val: &str) -> Result {
     let mut cwr = CommandWriter::new();
     cwr.args(3);
-    cwr.arg("SET");
-    cwr.arg(key);
-    cwr.arg(val);
+    cwr.arg_str("SET");
+    cwr.arg_str(key);
+    cwr.arg_str(val);
     cwr.with_buf(|cmd| execute(cmd, &mut self.io))
   }
 }
