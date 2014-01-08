@@ -1,4 +1,4 @@
-build:
+compile:
 	rustpkg build redis
 	rustpkg build -O bench
 	rustpkg build examples/simple
