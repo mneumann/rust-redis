@@ -1,8 +1,8 @@
 compile:
-	rustpkg build redis
+	rustpkg build -O redis
 	rustpkg build -O bench
 	rustpkg build examples/simple
-	rustpkg build examples/server
+	rustpkg build -O examples/server
 
 install:
 	rustpkg install redis
