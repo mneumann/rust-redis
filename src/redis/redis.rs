@@ -11,13 +11,14 @@ pub enum Result {
   Data(~[u8]),
   List(~[Result]),
   Error(~str),
-  Status(~str)
+  Status(~str),
+  ProtocolError(&'static str)
 }
 
-fn read_char<T: Stream>(io: &mut BufferedStream<T>) -> char {
+fn read_char<T: Stream>(io: &mut BufferedStream<T>) -> Option<char> {
   match io.read_byte() {
-    Some(ch) => ch as char,
-    None     => fail!()
+    Some(ch) => Some(ch as char),
+    None     => None
   }
 }
 
@@ -25,81 +26,114 @@ fn parse_data<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> Result {
   let res =
     if (len > 0) {
       let bytes = io.read_bytes(len);
-      assert!(bytes.len() == len);
-      Data(bytes)
+      if bytes.len() != len {
+        return ProtocolError("Invalid number of bytes")
+      } else {
+        Data(bytes)
+      }
     } else {
       Data(~[])
     };
-  assert!(read_char(io) == '\r');
-  assert!(read_char(io) == '\n');
+
+  if (read_char(io) != Some('\r')) {
+    return ProtocolError("Carriage return expected"); // TODO: ignore
+  }
+
+  if (read_char(io) != Some('\n')) {
+    return ProtocolError("Newline expected");
+  }
+
   return res;
 }
 
 fn parse_list<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> Result {
-  List(vec::from_fn(len, |_| { parse_response(io) }))
+  let mut list: ~[Result] = vec::with_capacity(len);
+
+  for _ in range(0, len) {
+    match parse_response(io) {
+      ProtocolError(err) => {
+        return ProtocolError(err);
+      }
+      other => {
+        list.push(other);
+      }
+    }
+  }
+
+  List(list)
 }
 
-fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> int {
+fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> Option<int> {
   let mut i: int = 0;
   let mut digits: uint = 0;
   let mut negative: bool = false;
 
   loop {
-    let ch = read_char(io);
-    match ch {
-      '0' .. '9' => {
-        digits += 1;
-        i = (i * 10) + (ch as int - '0' as int);
-        },
-      '-' => {
-        if negative { fail!() }
-        negative = true
-        },
-      '\r' => {
-        assert!(read_char(io) == '\n');
-        break
-        },
-      '\n' => break,
-      _ => fail!()
+    match read_char(io) {
+      None => { return None }
+      Some(ch) => {
+        match ch {
+          '0' .. '9' => {
+            digits += 1;
+            i = (i * 10) + (ch as int - '0' as int);
+          }
+          '-' => {
+            if negative { return None }
+            negative = true
+          }
+          '\r' => {
+            if read_char(io) != Some('\n') { return None } 
+            break
+          }
+          '\n' => { break }
+          _ => { return None }
+        }
+      }
     }
   }
 
-  if digits == 0 { fail!() }
+  if digits == 0 { return None }
 
-  if negative { -i }
-  else { i }
+  if negative { Some(-i) }
+  else { Some(i) }
 }
 
 fn parse_n<T: Stream>(io: &mut BufferedStream<T>, f: |uint, &mut BufferedStream<T>| -> Result) -> Result {
   match parse_int_line(io) {
-    -1 => Nil,
-    len if len >= 0 => f(len as uint, io),
-    _ => fail!()
+    Some(-1) => Nil,
+    Some(len) if len >= 0 => f(len as uint, io),
+    _ => ProtocolError("Invalid number")
   }
 }
 
 fn parse_status<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   match io.read_line() {
     Some(line) => Status(line),
-    None       => fail!()
+    None       => ProtocolError("Invalid status line") 
   }
 }
 
 fn parse_error<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   match io.read_line() {
     Some(line) => Error(line),
-    None       => fail!()
+    None       => ProtocolError("Invalid error line")
   }
 }
 
 fn parse_response<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   match read_char(io) {
-    '$' => parse_n(io, parse_data),
-    '*' => parse_n(io, parse_list),
-    '+' => parse_status(io),
-    '-' => parse_error(io),
-    ':' => Int(parse_int_line(io)),
-    _   => fail!()
+    Some('$') => parse_n(io, parse_data),
+    Some('*') => parse_n(io, parse_list),
+    Some('+') => parse_status(io),
+    Some('-') => parse_error(io),
+    Some(':') => {
+      match parse_int_line(io) {
+        Some(i) => Int(i),
+        None => ProtocolError("Invalid number")
+      }
+    },
+    Some(_)   => ProtocolError("Invalid character"),
+    None      => ProtocolError("Invalid EOF")
   }
 }
 
