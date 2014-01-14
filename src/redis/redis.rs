@@ -8,7 +8,7 @@ use std::str::from_utf8;
 
 pub enum Result {
   Nil,
-  Int(int),
+  Int(i64),
   Data(~[u8]),
   List(~[Result]),
   Error(~str),
@@ -64,8 +64,8 @@ fn parse_list<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> Result {
   List(list)
 }
 
-fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> Option<int> {
-  let mut i: int = 0;
+fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> Option<i64> {
+  let mut i: i64 = 0;
   let mut digits: uint = 0;
   let mut negative: bool = false;
 
@@ -76,7 +76,7 @@ fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> Option<int> {
         match ch {
           '0' .. '9' => {
             digits += 1;
-            i = (i * 10) + (ch as int - '0' as int);
+            i = (i * 10) + (ch as i64 - '0' as i64);
           }
           '-' => {
             if negative { return None }
@@ -102,7 +102,7 @@ fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> Option<int> {
 fn parse_n<T: Stream>(io: &mut BufferedStream<T>, f: |uint, &mut BufferedStream<T>| -> Result) -> Result {
   match parse_int_line(io) {
     Some(-1) => Nil,
-    Some(len) if len >= 0 => f(len as uint, io),
+    Some(len) if len >= 0 => f(len as uint, io), // XXX: i64 might be larger than uint
     _ => ProtocolError("Invalid number")
   }
 }
@@ -110,7 +110,7 @@ fn parse_n<T: Stream>(io: &mut BufferedStream<T>, f: |uint, &mut BufferedStream<
 fn parse_status<T: Stream>(io: &mut BufferedStream<T>) -> Result {
   match io.read_line() {
     Some(line) => Status(line),
-    None       => ProtocolError("Invalid status line") 
+    None       => ProtocolError("Invalid status line")
   }
 }
 
@@ -199,7 +199,7 @@ impl CommandWriter {
       self.write_byte('0' as u8 + (n as u8));
     }
     else {
-      push_bytes(&mut self.buf, n.to_str().into_bytes());
+      push_bytes(&mut self.buf, n.to_str().into_bytes()); // XXX: Optimize
     }
   }
 
@@ -264,7 +264,7 @@ impl<T: Stream> Client<T> {
     }
   }
 
-  pub fn get_int(&mut self, key: &str) -> Option<int> {
+  pub fn get_int(&mut self, key: &str) -> Option<i64> {
     match self.get(key) {
       Nil => None,
       Data(ref bytes) => from_str(from_utf8(*bytes)), // XXX
@@ -281,11 +281,11 @@ impl<T: Stream> Client<T> {
         with_buf(|cmd| execute(cmd, &mut self.io))
   }
 
-  pub fn set_int(&mut self, key: &str, val: int) -> Result {
+  pub fn set_int(&mut self, key: &str, val: i64) -> Result {
     self.set(key, val.to_str())
   }
 
-  pub fn incr(&mut self, key: &str) -> int {
+  pub fn incr(&mut self, key: &str) -> i64 {
     let mut cwr = CommandWriter::new();
     let res = cwr.args(2).
         arg_str("INCR").
