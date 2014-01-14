@@ -146,18 +146,20 @@ impl CommandWriter {
     CommandWriter { buf: ~[] }
   }
 
-  pub fn args(&mut self, n: uint) {
+  pub fn args<'a>(&'a mut self, n: uint) -> &'a mut CommandWriter {
     self.write_char('*');
     self.write_uint(n);
     self.write_crnl();
+    self
   }
 
-  pub fn arg_bin(&mut self, arg: &[u8]) {
+  pub fn arg_bin<'a>(&'a mut self, arg: &[u8]) -> &'a mut CommandWriter {
     self.write_char('$');
     self.write_uint(arg.len());
     self.write_crnl();
     self.write(arg);
     self.write_crnl();
+    self
   }
 
   pub fn nil(&mut self) {
@@ -165,12 +167,13 @@ impl CommandWriter {
     self.write_crnl();
   }
 
-  pub fn arg_str(&mut self, arg: &str) {
+  pub fn arg_str<'a>(&'a mut self, arg: &str) -> &'a mut CommandWriter {
     self.write_char('$');
     self.write_uint(arg.len());
     self.write_crnl();
     self.write_str(arg);
     self.write_crnl();
+    self
   }
 
   pub fn error(&mut self, err: &str) {
@@ -245,18 +248,18 @@ impl<T: Stream> Client<T> {
 
   pub fn get(&mut self, key: &str) -> Result {
     let mut cwr = CommandWriter::new();
-    cwr.args(2);
-    cwr.arg_str("GET");
-    cwr.arg_str(key);
-    cwr.with_buf(|cmd| execute(cmd, &mut self.io))
+    cwr.args(2).
+        arg_str("GET").
+        arg_str(key).
+        with_buf(|cmd| execute(cmd, &mut self.io))
   }
   
   pub fn set(&mut self, key: &str, val: &str) -> Result {
     let mut cwr = CommandWriter::new();
-    cwr.args(3);
-    cwr.arg_str("SET");
-    cwr.arg_str(key);
-    cwr.arg_str(val);
-    cwr.with_buf(|cmd| execute(cmd, &mut self.io))
+    cwr.args(3).
+        arg_str("SET").
+        arg_str(key).
+        arg_str(val).
+        with_buf(|cmd| execute(cmd, &mut self.io))
   }
 }
