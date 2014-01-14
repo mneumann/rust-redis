@@ -16,14 +16,15 @@ fn main() {
 
   let concurrency: uint = from_str(std::os::args()[1]).unwrap();
   let repeats: uint = from_str(std::os::args()[2]).unwrap();
-  let total_reqs = concurrency * repeats;
+  let per_thread: uint = repeats / concurrency;
+  let total_reqs = per_thread * concurrency;
 
   let mut pool = green::SchedPool::new(green::PoolConfig { threads: concurrency, event_loop_factory: None });
 
   for i in range(0, concurrency) {
     println!("Client {} started", i);
     do pool.spawn(std::task::TaskOpts::new()) {
-      bench_set(repeats);
+      bench_set(per_thread);
     }
   }
   println!("Waiting for all clients to terminate");
