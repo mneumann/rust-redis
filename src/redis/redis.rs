@@ -4,6 +4,7 @@ use std::io::net::tcp::TcpStream;
 use std::io::Stream;
 use std::vec::bytes::push_bytes;
 use std::vec;
+use std::str::from_utf8;
 
 pub enum Result {
   Nil,
@@ -253,6 +254,23 @@ impl<T: Stream> Client<T> {
         arg_str(key).
         with_buf(|cmd| execute(cmd, &mut self.io))
   }
+
+  pub fn get_str(&mut self, key: &str) -> Option<~str> {
+    match self.get(key) {
+      Nil => None,
+      Int(i) => Some(i.to_str()),
+      Data(ref bytes) => Some(from_utf8(*bytes).to_owned()),
+      _ => fail!("Invalid result type from Redis") 
+    }
+  }
+
+  pub fn get_int(&mut self, key: &str) -> Option<int> {
+    match self.get(key) {
+      Nil => None,
+      Int(i) => Some(i),
+      _ => fail!("Invalid result type from Redis") 
+    }
+  }
   
   pub fn set(&mut self, key: &str, val: &str) -> Result {
     let mut cwr = CommandWriter::new();
@@ -261,5 +279,9 @@ impl<T: Stream> Client<T> {
         arg_str(key).
         arg_str(val).
         with_buf(|cmd| execute(cmd, &mut self.io))
+  }
+
+  pub fn set_int(&mut self, key: &str, val: int) -> Result {
+    self.set(key, val.to_str())
   }
 }
