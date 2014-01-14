@@ -267,7 +267,7 @@ impl<T: Stream> Client<T> {
   pub fn get_int(&mut self, key: &str) -> Option<int> {
     match self.get(key) {
       Nil => None,
-      Int(i) => Some(i),
+      Data(ref bytes) => from_str(from_utf8(*bytes)), // XXX
       _ => fail!("Invalid result type from Redis") 
     }
   }
@@ -283,5 +283,17 @@ impl<T: Stream> Client<T> {
 
   pub fn set_int(&mut self, key: &str, val: int) -> Result {
     self.set(key, val.to_str())
+  }
+
+  pub fn incr(&mut self, key: &str) -> int {
+    let mut cwr = CommandWriter::new();
+    let res = cwr.args(2).
+        arg_str("INCR").
+        arg_str(key).
+        with_buf(|cmd| execute(cmd, &mut self.io));
+    match res {
+      Int(i) => i,
+      _ => fail!()
+    }
   }
 }

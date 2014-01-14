@@ -5,6 +5,8 @@ fn main() {
   redis.set_int("counter", 1);
   redis.set("key", "Hello");
 
+  redis.incr("counter");
+
   let counter = redis.get_int("counter").unwrap();
   println!("counter = {}", counter);
 
