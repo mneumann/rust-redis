@@ -1,7 +1,6 @@
-use std::io::buffered::BufferedStream;
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::TcpStream;
-use std::io::Stream;
+use std::io::{BufferedStream, Stream};
 use std::vec::bytes::push_bytes;
 use std::vec;
 use std::str::from_utf8;

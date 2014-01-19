@@ -14,7 +14,7 @@ extern mod extra;
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::{TcpListener,TcpStream};
 use std::io::{Listener,Acceptor,Writer};
-use std::io::buffered::BufferedStream;
+use std::io::BufferedStream;
 use std::task;
 use std::hashmap::HashMap;
 use extra::arc::RWArc;
