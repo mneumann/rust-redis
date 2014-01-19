@@ -1,14 +1,18 @@
 extern mod redis = "redis#0.1";
 extern mod extra;
-extern mod green;
-use redis::Client;
+extern mod native;
 
-fn bench_set(n: uint) {
+use redis::Client;
+use native::task;
+
+fn bench_set(tid: uint, n: uint) {
   let mut redis = Client::new("127.0.0.1:6379");
 
   for _ in range(0, n) {
     redis.set("key", "12");
   }
+
+  println!("Thread {} finished", tid);
 }
 
 fn main() {
@@ -19,16 +23,23 @@ fn main() {
   let per_thread: uint = repeats / concurrency;
   let total_reqs = per_thread * concurrency;
 
-  let mut pool = green::SchedPool::new(green::PoolConfig { threads: concurrency, event_loop_factory: None });
+  let mut threads = ~[];
 
-  for i in range(0, concurrency) {
-    println!("Client {} started", i);
-    do pool.spawn(std::task::TaskOpts::new()) {
-      bench_set(per_thread);
+  for tid in range(0, concurrency) {
+    println!("Thread {} started", tid);
+    
+    let (port, chan) = Chan::new();
+    do task::spawn {
+      bench_set(tid, per_thread);
+      chan.send(());
     }
+    threads.push(port);
   }
+
   println!("Waiting for all clients to terminate");
-  pool.shutdown();
+  for port in threads.iter() {
+      port.recv();
+  }
 
   let after = extra::time::precise_time_ns();
 
