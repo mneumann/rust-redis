@@ -258,7 +258,7 @@ impl<T: Stream> Client<T> {
     match self.get(key) {
       Nil => None,
       Int(i) => Some(i.to_str()),
-      Data(ref bytes) => Some(from_utf8(*bytes).to_owned()),
+      Data(ref bytes) => Some(from_utf8(*bytes).unwrap().to_owned()),
       _ => fail!("Invalid result type from Redis") 
     }
   }
@@ -266,7 +266,7 @@ impl<T: Stream> Client<T> {
   pub fn get_int(&mut self, key: &str) -> Option<i64> {
     match self.get(key) {
       Nil => None,
-      Data(ref bytes) => from_str(from_utf8(*bytes)), // XXX
+      Data(ref bytes) => from_str(from_utf8(*bytes).unwrap()), // XXX
       _ => fail!("Invalid result type from Redis") 
     }
   }
