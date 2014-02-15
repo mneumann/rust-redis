@@ -7,13 +7,13 @@ fn main() {
 
   redis.incr("counter");
 
-  let counter = redis.get_int("counter").unwrap();
+  let counter = redis.get_int("counter").unwrap().unwrap();
   println!("counter = {}", counter);
 
-  let key = redis.get_str("key").unwrap();
+  let key = redis.get_str("key").unwrap().unwrap();
   println!("key = {}", key);
 
-  match redis.get("key") {
+  match redis.get("key").unwrap() {
     redis::Nil => {
       println!("Key not found")
     }

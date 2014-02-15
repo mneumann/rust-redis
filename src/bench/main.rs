@@ -29,10 +29,10 @@ fn main() {
     println!("Thread {} started", tid);
     
     let (port, chan) = Chan::new();
-    do task::spawn {
+    task::spawn(proc() {
       bench_set(tid, per_thread);
       chan.send(());
-    }
+    });
     threads.push(port);
   }
 

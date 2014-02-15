@@ -9,7 +9,7 @@
  */
 
 extern mod redis = "redis#0.1";
-extern mod extra;
+extern mod sync = "sync#0.10-pre";
 
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::{TcpListener,TcpStream};
@@ -17,7 +17,7 @@ use std::io::{Listener,Acceptor,Writer};
 use std::io::BufferedStream;
 use std::task;
 use std::hashmap::HashMap;
-use extra::arc::RWArc;
+use sync::RWArc;
 
 fn handle_connection(conn: TcpStream, shared_ht: RWArc<HashMap<~[u8],~[u8]>>) {
     debug!("Got connection");
@@ -25,9 +25,9 @@ fn handle_connection(conn: TcpStream, shared_ht: RWArc<HashMap<~[u8],~[u8]>>) {
     let mut io = BufferedStream::new(conn);
 
     loop {
-        match redis::parse(&mut io) {
+        match redis::parse(&mut io).unwrap() {
             redis::List([redis::Data(/*GET*/[71, 69, 84]), redis::Data(key)]) => {
-                debug!("GET: {:s}", std::str::from_utf8(key));
+                debug!("GET: {:s}", std::str::from_utf8(key).unwrap());
                 let mut cwr = redis::CommandWriter::new();
                 shared_ht.read(|ht| {
                     match ht.find(&key) {
@@ -44,7 +44,7 @@ fn handle_connection(conn: TcpStream, shared_ht: RWArc<HashMap<~[u8],~[u8]>>) {
             }
             redis::List([redis::Data(/*SET*/[83, 69, 84]), redis::Data(key),
                          redis::Data(val)]) => {
-                debug!("SET: {:s} {:?}", std::str::from_utf8(key), val);
+                debug!("SET: {:s} {:?}", std::str::from_utf8(key).unwrap(), val);
 
                 shared_ht.write(|ht| ht.insert(key.clone(), val.clone()));
                 let mut cwr = redis::CommandWriter::new();
@@ -65,24 +65,24 @@ fn main() {
     let shared_ht = RWArc::new(HashMap::new());
 
     match TcpListener::bind(addr) {
-        Some(listener) => {
+        Ok(listener) => {
             match listener.listen() {
-                Some(ref mut acceptor) => {
+                Ok(ref mut acceptor) => {
                     loop {
                         match acceptor.accept() {
-                            Some(conn) => {
+                            Ok(conn) => {
                                 let ht = shared_ht.clone();
-                                do task::spawn {
+                                task::spawn(proc() {
                                     handle_connection(conn, ht)
-                                }
+                                });
                             }
-                            None => {}
+                            Err(_) => {}
                         }
                     }
                 }
-                None => {}
+                Err(_) => {}
             }
         }
-        None => {}
+        Err(_) => {}
     }
 }
