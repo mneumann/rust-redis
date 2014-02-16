@@ -1,4 +1,4 @@
-extern mod redis = "redis#0.1";
+extern crate redis = "redis#0.1";
 
 fn main() {
   let mut redis = redis::Client::new("127.0.0.1:6379");

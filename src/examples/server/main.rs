@@ -8,8 +8,8 @@
  *
  */
 
-extern mod redis = "redis#0.1";
-extern mod sync = "sync#0.10-pre";
+extern crate redis = "redis#0.1";
+extern crate sync = "sync#0.10-pre";
 
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::{TcpListener,TcpStream};

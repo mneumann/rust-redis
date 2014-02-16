@@ -1,6 +1,6 @@
-extern mod redis = "redis#0.1";
-extern mod extra;
-extern mod native;
+extern crate redis = "redis#0.1";
+extern crate extra;
+extern crate native;
 
 use redis::Client;
 use native::task;
