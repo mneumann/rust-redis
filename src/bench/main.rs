@@ -1,5 +1,5 @@
 extern crate redis = "redis#0.1";
-extern crate extra;
+extern crate time;
 extern crate native;
 
 use redis::Client;
@@ -16,7 +16,7 @@ fn bench_set(tid: uint, n: uint) {
 }
 
 fn main() {
-  let before = extra::time::precise_time_ns();
+  let before = time::precise_time_ns();
 
   let concurrency: uint = from_str(std::os::args()[1]).unwrap();
   let repeats: uint = from_str(std::os::args()[2]).unwrap();
@@ -41,7 +41,7 @@ fn main() {
       port.recv();
   }
 
-  let after = extra::time::precise_time_ns();
+  let after = time::precise_time_ns();
 
   let time = ((after - before) / 1_000_000) as f64 / 1000f64;
 
