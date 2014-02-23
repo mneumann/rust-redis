@@ -28,14 +28,14 @@ fn handle_connection(conn: TcpStream, shared_ht: RWArc<HashMap<~[u8],~[u8]>>) {
         match redis::parse(&mut io).unwrap() {
             redis::List(ref lst) => {
                 match lst.get(0) {
-                    Some(redis::Data(ref command)) => {
-                        if command == bytes!("GET") {
+                    Some(&redis::Data(ref command)) => {
+                        if command.as_slice() == bytes!("GET") {
                             match (lst.len(), lst.get(1)) {
-                                (2, Some(redis::Data(key))) => {
-                                    debug!("GET: {:s}", std::str::from_utf8(key).unwrap());
+                                (2, Some(&redis::Data(ref key))) => {
+                                    debug!("GET: {:s}", std::str::from_utf8(key.as_slice()).unwrap());
                                     let mut cwr = redis::CommandWriter::new();
                                     shared_ht.read(|ht| {
-                                        match ht.find(&key) {
+                                        match ht.find(key) {
                                             Some(val) => {
                                                 cwr.args(1);
                                                 cwr.arg_bin(*val);
@@ -51,10 +51,10 @@ fn handle_connection(conn: TcpStream, shared_ht: RWArc<HashMap<~[u8],~[u8]>>) {
                                 _ => { /* fallthrough: error */ }
                             }
                         }
-                        else if command == bytes!("SET") {
+                        else if command.as_slice() == bytes!("SET") {
                             match (lst.len(), lst.get(1), lst.get(2)) {
-                                (3, redis::Data(key), redis::Data(val)) => {
-                                    debug!("SET: {:s} {:?}", std::str::from_utf8(key).unwrap(), val);
+                                (3, Some(&redis::Data(ref key)), Some(&redis::Data(ref val))) => {
+                                    debug!("SET: {:s} {:?}", std::str::from_utf8(key.as_slice()).unwrap(), val);
                                     shared_ht.write(|ht| ht.insert(key.clone(), val.clone()));
                                     let mut cwr = redis::CommandWriter::new();
                                     cwr.status("OK");
