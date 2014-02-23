@@ -28,10 +28,10 @@ fn handle_connection(conn: TcpStream, shared_ht: RWArc<HashMap<~[u8],~[u8]>>) {
         match redis::parse(&mut io).unwrap() {
             redis::List(ref lst) => {
                 match lst.get(0) {
-                    Some(redis::Data(ref command)) {
+                    Some(redis::Data(ref command)) => {
                         if command == bytes!("GET") {
                             match (lst.len(), lst.get(1)) {
-                                (2, Some(redis::Data(key)))  => {
+                                (2, Some(redis::Data(key))) => {
                                     debug!("GET: {:s}", std::str::from_utf8(key).unwrap());
                                     let mut cwr = redis::CommandWriter::new();
                                     shared_ht.read(|ht| {
