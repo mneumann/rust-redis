@@ -25,13 +25,13 @@ fn invalid_input(desc: &'static str) -> IoError {
 }
 
 fn read_char<T: Stream>(io: &mut BufferedStream<T>) -> IoResult<char> {
-  Ok(if_ok!(io.read_byte()) as char)
+  Ok(try!(io.read_byte()) as char)
 }
 
 fn parse_data<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> IoResult<Result> {
   let res =
     if len > 0 {
-      let bytes = if_ok!(io.read_bytes(len));
+      let bytes = try!(io.read_bytes(len));
       if bytes.len() != len {
         return Err(invalid_input("Invalid number of bytes"))
       } else {
@@ -42,11 +42,11 @@ fn parse_data<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> IoResult<Resu
       Data(~[])
     };
 
-  if if_ok!(read_char(io)) != '\r' {
+  if try!(read_char(io)) != '\r' {
     return Err(invalid_input("Carriage return expected")); // TODO: ignore
   }
 
-  if if_ok!(read_char(io)) != '\n' {
+  if try!(read_char(io)) != '\n' {
     return Err(invalid_input("Newline expected"));
   }
 
@@ -57,7 +57,7 @@ fn parse_list<T: Stream>(len: uint, io: &mut BufferedStream<T>) -> IoResult<Resu
   let mut list: ~[Result] = vec::with_capacity(len);
 
   for _ in range(0, len) {
-    list.push(if_ok!(parse(io)))
+    list.push(try!(parse(io)))
   }
 
   Ok(List(list))
@@ -69,7 +69,7 @@ fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> IoResult<i64> {
   let mut negative: bool = false;
 
   loop {
-    match if_ok!(read_char(io)) {
+    match try!(read_char(io)) {
       ch @ '0' .. '9' => {
         digits += 1;
         i = (i * 10) + (ch as i64 - '0' as i64);
@@ -79,7 +79,7 @@ fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> IoResult<i64> {
         negative = true
       }
       '\r' => {
-        if if_ok!(read_char(io)) != '\n' {
+        if try!(read_char(io)) != '\n' {
           return Err(invalid_input("Newline expected"))
         }
         break
@@ -96,7 +96,7 @@ fn parse_int_line<T: Stream>(io: &mut BufferedStream<T>) -> IoResult<i64> {
 }
 
 fn parse_n<T: Stream>(io: &mut BufferedStream<T>, f: |uint, &mut BufferedStream<T>| -> IoResult<Result>) -> IoResult<Result> {
-  match if_ok!(parse_int_line(io)) {
+  match try!(parse_int_line(io)) {
     -1 => Ok(Nil),
     len if len >= 0 => f(len as uint, io), // XXX: i64 might be larger than uint
     _ => Err(invalid_input("Invalid number"))
@@ -104,20 +104,20 @@ fn parse_n<T: Stream>(io: &mut BufferedStream<T>, f: |uint, &mut BufferedStream<
 }
 
 fn parse_status<T: Stream>(io: &mut BufferedStream<T>) -> IoResult<Result> {
-  Ok(Status(if_ok!(io.read_line())))
+  Ok(Status(try!(io.read_line())))
 }
 
 fn parse_error<T: Stream>(io: &mut BufferedStream<T>) -> IoResult<Result> {
-  Ok(Error(if_ok!(io.read_line())))
+  Ok(Error(try!(io.read_line())))
 }
 
 pub fn parse<T: Stream>(io: &mut BufferedStream<T>) -> IoResult<Result> {
-  match if_ok!(read_char(io)) {
+  match try!(read_char(io)) {
     '$' => parse_n(io, parse_data),
     '*' => parse_n(io, parse_list),
     '+' => parse_status(io),
     '-' => parse_error(io),
-    ':' => Ok(Int(if_ok!(parse_int_line(io)))),
+    ':' => Ok(Int(try!(parse_int_line(io)))),
     _   => Err(invalid_input("Invalid character")) 
   }
 }
@@ -209,8 +209,8 @@ impl CommandWriter {
 }
 
 fn execute<T: Stream>(cmd: &[u8], io: &mut BufferedStream<T>) -> IoResult<Result> {
-  if_ok!(io.write(cmd));
-  if_ok!(io.flush());
+  try!(io.write(cmd));
+  try!(io.flush());
   parse(io)
 }
 
@@ -240,7 +240,7 @@ impl<T: Stream> Client<T> {
   }
 
   pub fn get_str(&mut self, key: &str) -> IoResult<Option<~str>> {
-    match if_ok!(self.get(key)) {
+    match try!(self.get(key)) {
       Nil => Ok(None),
       Int(i) => Ok(Some(i.to_str())),
       Data(ref bytes) => Ok(Some(from_utf8(*bytes).unwrap().to_owned())),
@@ -249,7 +249,7 @@ impl<T: Stream> Client<T> {
   }
 
   pub fn get_int(&mut self, key: &str) -> IoResult<Option<i64>> {
-    match if_ok!(self.get(key)) {
+    match try!(self.get(key)) {
       Nil => Ok(None),
       Data(ref bytes) => Ok(from_str(from_utf8(*bytes).unwrap())), // XXX
       _ => fail!("Invalid result type from Redis") 
@@ -271,7 +271,7 @@ impl<T: Stream> Client<T> {
 
   pub fn incr(&mut self, key: &str) -> IoResult<i64> {
     let mut cwr = CommandWriter::new();
-    let res = if_ok!(cwr.args(2).
+    let res = try!(cwr.args(2).
         arg_str("INCR").
         arg_str(key).
         with_buf(|cmd| execute(cmd, &mut self.io)));
