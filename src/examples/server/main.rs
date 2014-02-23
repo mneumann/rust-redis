@@ -26,37 +26,47 @@ fn handle_connection(conn: TcpStream, shared_ht: RWArc<HashMap<~[u8],~[u8]>>) {
 
     loop {
         match redis::parse(&mut io).unwrap() {
-            redis::List([redis::Data(/*GET*/[71, 69, 84]), redis::Data(key)]) => {
-                debug!("GET: {:s}", std::str::from_utf8(key).unwrap());
-                let mut cwr = redis::CommandWriter::new();
-                shared_ht.read(|ht| {
-                    match ht.find(&key) {
-                        Some(val) => {
-                            cwr.args(1);
-                            cwr.arg_bin(*val);
-                        }
-                        None => {
-                            cwr.nil();
-                        }
+            redis::List(ref lst) => {
+                match (lst.len(), lst.get(0), lst.get(1), lst.get(2)) {
+                    (2, Some(redis::Data(/*GET*/[71, 69, 84])), Some(redis::Data(key)))  => {
+                        debug!("GET: {:s}", std::str::from_utf8(key).unwrap());
+                        let mut cwr = redis::CommandWriter::new();
+                        shared_ht.read(|ht| {
+                            match ht.find(&key) {
+                                Some(val) => {
+                                    cwr.args(1);
+                                    cwr.arg_bin(*val);
+                                }
+                                None => {
+                                    cwr.nil();
+                                }
+                            }
+                        });
+                        cwr.with_buf(|bytes| {io.write(bytes); io.flush()});
+                        continue;
                     }
-                });
-                cwr.with_buf(|bytes| {io.write(bytes); io.flush()});
-            }
-            redis::List([redis::Data(/*SET*/[83, 69, 84]), redis::Data(key),
-                         redis::Data(val)]) => {
-                debug!("SET: {:s} {:?}", std::str::from_utf8(key).unwrap(), val);
 
-                shared_ht.write(|ht| ht.insert(key.clone(), val.clone()));
-                let mut cwr = redis::CommandWriter::new();
-                cwr.status("OK");
-                cwr.with_buf(|bytes| {io.write(bytes); io.flush()});
+                    (3, redis::Data(/*SET*/[83, 69, 84]), redis::Data(key),
+                                                          redis::Data(val)) => {
+
+                        debug!("SET: {:s} {:?}", std::str::from_utf8(key).unwrap(), val);
+                        shared_ht.write(|ht| ht.insert(key.clone(), val.clone()));
+                        let mut cwr = redis::CommandWriter::new();
+                        cwr.status("OK");
+                        cwr.with_buf(|bytes| {io.write(bytes); io.flush()});
+                        continue;
+                    }
+
+                    _ => { /* fallthrough: error */ }
+                }
             }
-            _ => {
-                let mut cwr = redis::CommandWriter::new();
-                cwr.error("Invalid Command");
-                cwr.with_buf(|bytes| {io.write(bytes); io.flush()});
-            }
+            _ => { /* fallthrough: error */ }
         }
+
+        /* error */
+        let mut cwr = redis::CommandWriter::new();
+        cwr.error("Invalid Command");
+        cwr.with_buf(|bytes| {io.write(bytes); io.flush()});
     }
 }
 
