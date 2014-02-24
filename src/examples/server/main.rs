@@ -10,13 +10,14 @@
 
 extern crate redis = "redis#0.1";
 extern crate sync = "sync#0.10-pre";
+extern crate collections;
 
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::{TcpListener,TcpStream};
 use std::io::{Listener,Acceptor,Writer};
 use std::io::BufferedStream;
 use std::task;
-use std::hashmap::HashMap;
+use collections::hashmap::HashMap;
 use sync::RWArc;
 
 fn handle_connection(conn: TcpStream, shared_ht: RWArc<HashMap<~[u8],~[u8]>>) {
