@@ -1,3 +1,5 @@
+#[feature(phase)];
+
 /*
  * An example redis server accepting GET and SET requests
  * listening on 127.0.0.1:8000.
@@ -11,6 +13,7 @@
 extern crate redis = "redis#0.1";
 extern crate sync = "sync#0.10-pre";
 extern crate collections;
+#[phase(syntax, link)] extern crate log;
 
 use std::io::net::ip::SocketAddr;
 use std::io::net::tcp::{TcpListener,TcpStream};
