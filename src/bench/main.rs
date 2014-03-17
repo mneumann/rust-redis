@@ -4,6 +4,7 @@ extern crate native;
 
 use redis::Client;
 use native::task;
+use std::comm::channel;
 
 fn bench_set(tid: uint, n: uint) {
   let mut redis = Client::new("127.0.0.1:6379");
@@ -28,17 +29,17 @@ fn main() {
   for tid in range(0, concurrency) {
     println!("Thread {} started", tid);
     
-    let (port, chan) = Chan::new();
+    let (sender, receiver) = channel();
     task::spawn(proc() {
       bench_set(tid, per_thread);
-      chan.send(());
+      sender.send(());
     });
-    threads.push(port);
+    threads.push(receiver);
   }
 
   println!("Waiting for all clients to terminate");
-  for port in threads.iter() {
-      port.recv();
+  for receiver in threads.iter() {
+      receiver.recv();
   }
 
   let after = time::precise_time_ns();
