@@ -1,7 +1,7 @@
-#[crate_id = "redis#0.1"];
-#[desc = "A Rust client library for Redis"];
-#[license = "MIT"];
-#[crate_type = "lib"];
+#![crate_id = "redis#0.1"]
+#![desc = "A Rust client library for Redis"]
+#![license = "MIT"]
+#![crate_type = "lib"]
 
 use std::io::{IoResult,IoError,InvalidInput};
 use std::io::net::ip::SocketAddr;
